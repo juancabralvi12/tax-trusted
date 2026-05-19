@@ -20,6 +20,136 @@ The product flow is simple:
 
 ## Architecture
 
+### Class & Infrastructure Overview
+
+The diagram below maps every module — frontend types, API controllers, DTOs, services, JPA repositories, domain entities, and infrastructure — and shows how they depend on each other.
+
+```mermaid
+flowchart LR
+    classDef webCls    fill:#0891B2,stroke:#164E63,color:#fff,font-weight:bold
+    classDef webTyp    fill:#A5F3FC,stroke:#0891B2,color:#164E63
+    classDef ctrlCls   fill:#7C3AED,stroke:#4C1D95,color:#fff,font-weight:bold
+    classDef dtoCls    fill:#DDD6FE,stroke:#7C3AED,color:#2e1065
+    classDef svcCls    fill:#EA580C,stroke:#7C2D12,color:#fff,font-weight:bold
+    classDef repoCls   fill:#15803D,stroke:#14532D,color:#fff,font-weight:bold
+    classDef entCls    fill:#166534,stroke:#14532D,color:#fff
+    classDef enumCls   fill:#BBF7D0,stroke:#15803D,color:#14532D
+    classDef infraCls  fill:#B91C1C,stroke:#7F1D1D,color:#fff,font-weight:bold
+    classDef cacheCls  fill:#DC2626,stroke:#7F1D1D,color:#fff
+    classDef k8sCls    fill:#D97706,stroke:#78350F,color:#fff
+
+    %% ─── Web Module ────────────────────────────────────────
+    subgraph web["🌐  Web Module · React + TypeScript (Vite)"]
+        App["App\n«root component»"]:::webCls
+        subgraph webTypes["Types / Interfaces"]
+            TaxNeedT["TaxNeed\n«type»"]:::webTyp
+            TimelineT["Timeline\n«type»"]:::webTyp
+            ProviderT["Provider\n«interface»"]:::webTyp
+            MatchT["Match\n«interface»"]:::webTyp
+            LeadRespT["LeadResponse\n«interface»"]:::webTyp
+        end
+    end
+
+    %% ─── API Module ─────────────────────────────────────────
+    subgraph apimod["🔌  API Module · Controllers + DTOs"]
+        LC["LeadController\n@RestController\nPOST /api/leads\nGET  /api/leads/{id}"]:::ctrlCls
+        PC["ProviderController\n@RestController\nGET /api/providers"]:::ctrlCls
+        subgraph dtos["DTOs «record»"]
+            CLR["CreateLeadRequest"]:::dtoCls
+            LRsp["LeadResponse"]:::dtoCls
+            MRsp["MatchResponse"]:::dtoCls
+            PRsp["ProviderResponse"]:::dtoCls
+        end
+    end
+
+    %% ─── Service Module ──────────────────────────────────────
+    subgraph svcmod["⚙️  Service Module · Business Logic"]
+        LS["LeadService\n@Service · @Transactional"]:::svcCls
+        PMS["ProviderMatchingService\n@Service · @Cacheable"]:::svcCls
+    end
+
+    %% ─── Data Module ─────────────────────────────────────────
+    subgraph datamod["🗃️  Data Module · JPA Repositories + Domain"]
+        subgraph repos["«JpaRepository» interfaces"]
+            LRepo["LeadRepository"]:::repoCls
+            PRepo["ProviderRepository"]:::repoCls
+            LMRepo["LeadMatchRepository"]:::repoCls
+        end
+        subgraph entities["@Entity classes"]
+            LeadE["Lead"]:::entCls
+            ProvE["Provider"]:::entCls
+            LME["LeadMatch"]:::entCls
+        end
+        subgraph enums["Enums"]
+            TNE["TaxNeed"]:::enumCls
+            TLE["Timeline"]:::enumCls
+            LSE["LeadStatus"]:::enumCls
+        end
+    end
+
+    %% ─── Infrastructure ──────────────────────────────────────
+    subgraph infra["🏗️  Infrastructure"]
+        PG[("🐘 PostgreSQL\n:5432")]:::infraCls
+        RD[("⚡ Redis\n:6379")]:::cacheCls
+        ING["🌐 Nginx Ingress\ntax-trusted.example.com"]:::k8sCls
+        K8S["☸️ K8s Services\nweb · api · redis · postgres"]:::k8sCls
+    end
+
+    %% ── Flows ───────────────────────────────────────────────
+    App -->|"POST /api/leads"| LC
+    App -->|"GET /api/providers"| PC
+
+    LC --> CLR
+    LC --> LRsp
+    LRsp --> MRsp
+    MRsp --> PRsp
+
+    LC --> LS
+    PC --> PMS
+    LS --> PMS
+
+    LS  --> LRepo
+    LS  --> LMRepo
+    PMS --> PRepo
+
+    LRepo  -.->|manages| LeadE
+    PRepo  -.->|manages| ProvE
+    LMRepo -.->|manages| LME
+
+    LME -->|ManyToOne| LeadE
+    LME -->|ManyToOne| ProvE
+    LeadE -->|uses| TNE
+    LeadE -->|uses| TLE
+    LeadE -->|uses| LSE
+    ProvE -->|uses| TNE
+
+    LRepo  -->|JPA / JDBC| PG
+    PRepo  -->|JPA / JDBC| PG
+    LMRepo -->|JPA / JDBC| PG
+    PMS    -->|"@Cacheable"| RD
+
+    TaxNeedT  -. mirrors .-> TNE
+    TimelineT -. mirrors .-> TLE
+
+    ING -->|"/* → web:80"| K8S
+    ING -->|"/api/* → api:8080"| K8S
+
+    style web      fill:#ECFEFF,stroke:#0891B2,color:#164E63
+    style webTypes fill:#CFFAFE,stroke:#0891B2,color:#164E63
+    style apimod   fill:#F5F3FF,stroke:#7C3AED,color:#2e1065
+    style dtos     fill:#EDE9FE,stroke:#7C3AED,color:#2e1065
+    style svcmod   fill:#FFF7ED,stroke:#EA580C,color:#431407
+    style datamod  fill:#F0FDF4,stroke:#15803D,color:#14532D
+    style repos    fill:#DCFCE7,stroke:#15803D,color:#14532D
+    style entities fill:#BBF7D0,stroke:#166534,color:#14532D
+    style enums    fill:#F0FDF4,stroke:#86EFAC,color:#14532D
+    style infra    fill:#FEF2F2,stroke:#B91C1C,color:#7F1D1D
+```
+
+---
+
+### GCP Production Deployment
+
 The diagram below is the recommended **GCP production deployment** for this repo. It is slightly more detailed than the current manifests: the repo already has Kubernetes objects for `web`, `api`, `redis`, `postgres`, and `ingress`, and this diagram shows how those map to Google Cloud managed services and edge networking in a production setup.
 
 ```mermaid
