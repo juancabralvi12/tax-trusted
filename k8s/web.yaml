@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tax-trusted-web
+  namespace: tax-trusted
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tax-trusted-web
+  template:
+    metadata:
+      labels:
+        app: tax-trusted-web
+    spec:
+      containers:
+        - name: web
+          image: tax-trusted-web:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tax-trusted-web
+  namespace: tax-trusted
+spec:
+  selector:
+    app: tax-trusted-web
+  ports:
+    - port: 80
+      targetPort: 80
+
