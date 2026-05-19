@@ -24,38 +24,50 @@ The diagram below is the recommended **GCP production deployment** for this repo
 
 ```mermaid
 flowchart LR
-    user["Users / Browsers"] --> dns["1. Cloud DNS<br/>tax-trusted.example.com"]
-    dns --> edge["2. Global External Application Load Balancer<br/>Anycast IP on Google Front Ends"]
+    classDef userCls    fill:#3B82F6,stroke:#1D4ED8,color:#fff,font-weight:bold
+    classDef dnsCls     fill:#60A5FA,stroke:#2563EB,color:#fff
+    classDef edgeCls    fill:#F97316,stroke:#C2410C,color:#fff,font-weight:bold
+    classDef secCls     fill:#EF4444,stroke:#B91C1C,color:#fff
+    classDef gatewayCls fill:#7C3AED,stroke:#5B21B6,color:#fff
+    classDef webCls     fill:#059669,stroke:#047857,color:#fff
+    classDef apiCls     fill:#8B5CF6,stroke:#6D28D9,color:#fff
+    classDef hpaCls     fill:#C4B5FD,stroke:#7C3AED,color:#1e1b4b
+    classDef platformCls fill:#F59E0B,stroke:#B45309,color:#1c1917
+    classDef dataCls    fill:#10B981,stroke:#065F46,color:#fff
+    classDef buildCls   fill:#0D9488,stroke:#134E4A,color:#fff
 
-    subgraph edge_sec["3. Edge Security + Gateway"]
-        armor["Cloud Armor<br/>WAF + DDoS protection"]
-        certs["Certificate Manager<br/>Google-managed TLS certs"]
-        gateway["GKE Gateway API or Ingress<br/>Path routing rules"]
+    user["👤 Users / Browsers"]:::userCls --> dns["☁️ 1. Cloud DNS<br/>tax-trusted.example.com"]:::dnsCls
+    dns --> edge["⚡ 2. Global External Application Load Balancer<br/>Anycast IP · Google Front Ends"]:::edgeCls
+
+    subgraph edge_sec["🛡️ 3. Edge Security + Gateway"]
+        armor["🔒 Cloud Armor<br/>WAF + DDoS protection"]:::secCls
+        certs["🔑 Certificate Manager<br/>Google-managed TLS"]:::secCls
+        gateway["🌐 GKE Gateway API / Ingress<br/>Path routing rules"]:::gatewayCls
     end
 
     edge --> armor
     armor --> certs
     certs --> gateway
 
-    subgraph gke["4. GKE Regional Cluster (multi-zone)"]
-        websvc["tax-trusted-web Service"]
-        apisvc["tax-trusted-api Service"]
+    subgraph gke["☸️ 4. GKE Regional Cluster (multi-zone)"]
+        websvc["web Service"]:::webCls
+        apisvc["api Service"]:::apiCls
 
-        subgraph webtier["Web Tier"]
-            webpods["Web Deployment<br/>Nginx serving Vite static build<br/>2+ replicas"]
-            webhpa["Horizontal scaling<br/>Replica growth under load"]
+        subgraph webtier["🌍 Web Tier"]
+            webpods["📦 Web Deployment<br/>Nginx · Vite static build<br/>2+ replicas"]:::webCls
+            webhpa["📈 Horizontal Scaling<br/>Replica growth under load"]:::hpaCls
         end
 
-        subgraph apitier["API Tier"]
-            apipods["API Deployment<br/>Spring Boot lead + matching app<br/>2+ replicas"]
-            apihpa["HPA<br/>CPU / memory based scaling"]
-            wi["Workload Identity<br/>Least-privilege GCP access"]
+        subgraph apitier["⚙️ API Tier"]
+            apipods["🚀 API Deployment<br/>Spring Boot · lead + matching<br/>2+ replicas"]:::apiCls
+            apihpa["📊 HPA<br/>CPU / memory scaling"]:::hpaCls
+            wi["🔐 Workload Identity<br/>Least-privilege GCP access"]:::secCls
         end
 
-        subgraph platform["Cluster Platform"]
-            negs["Container-native load balancing<br/>NEGs per Service"]
-            ca["Cluster autoscaler / Autopilot capacity"]
-            logs["Cloud Logging + Monitoring"]
+        subgraph platform["🏗️ Cluster Platform"]
+            negs["⚖️ Container-native LB<br/>NEGs per Service"]:::platformCls
+            ca["🔄 Cluster Autoscaler<br/>Autopilot capacity"]:::platformCls
+            logs["📋 Cloud Logging<br/>+ Monitoring"]:::platformCls
         end
     end
 
@@ -73,27 +85,35 @@ flowchart LR
     logs --> apipods
     wi --> apipods
 
-    subgraph data["5. Managed Data Services on GCP"]
-        sql["Cloud SQL for PostgreSQL<br/>Private IP in VPC"]
-        redis["Memorystore for Redis<br/>Private service endpoint"]
-        backups["Automated backups + HA options"]
+    subgraph data["🗄️ 5. Managed Data Services"]
+        sql["🐘 Cloud SQL for PostgreSQL<br/>Private IP in VPC"]:::dataCls
+        redis["⚡ Memorystore for Redis<br/>Private service endpoint"]:::dataCls
+        backups["💾 Automated Backups + HA"]:::dataCls
     end
 
-    apipods -->|"JDBC over private IP"| sql
-    apipods -->|"Redis client over private IP"| redis
+    apipods -->|"JDBC · private IP"| sql
+    apipods -->|"Redis client · private IP"| redis
     backups --> sql
     backups --> redis
 
-    subgraph delivery["6. Build + Release Path"]
-        git["GitHub / Source repo"]
-        build["Cloud Build or GitHub Actions"]
-        registry["Artifact Registry<br/>Web + API images"]
+    subgraph delivery["🚀 6. Build + Release Path"]
+        git["🐙 GitHub<br/>Source Repo"]:::buildCls
+        build["🔨 Cloud Build<br/>GitHub Actions"]:::buildCls
+        registry["📦 Artifact Registry<br/>Web + API images"]:::buildCls
     end
 
     git --> build
     build --> registry
     registry --> webpods
     registry --> apipods
+
+    style edge_sec  fill:#FEE2E2,stroke:#EF4444,color:#450a0a
+    style gke       fill:#EDE9FE,stroke:#7C3AED,color:#2e1065
+    style webtier   fill:#D1FAE5,stroke:#059669,color:#022c22
+    style apitier   fill:#F3E8FF,stroke:#8B5CF6,color:#2e1065
+    style platform  fill:#FEF3C7,stroke:#F59E0B,color:#1c1917
+    style data      fill:#D1FAE5,stroke:#10B981,color:#022c22
+    style delivery  fill:#CCFBF1,stroke:#0D9488,color:#042f2e
 ```
 
 ### How Traffic Flows
